@@ -1,0 +1,42 @@
+﻿# Build results
+[Bb]in/
+[Oo]bj/
+
+# Visual Studio cache/options directory
+.vs/
+.vscode/
+
+# User-specific files
+*.user
+*.userosscache
+*.sln.docstates
+
+# UnitTest results
+TestResults/
+
+# Windows image file caches
+Thumbs.db
+ehthumbs.db
+
+# Folder config file
+Desktop.ini
+
+# ClickOnce related
+publish/
+
+# Modern .NET configuration with secrets
+appsettings.Development.json
+secrets.json
+
+# Classic .NET configuration (if you use External Config files)
+ConnectionStrings.config
+AppSettings.config
+
+# Local Database Files (If you test with local SQL files instead of Azure)
+*.mdf
+*.ldf
+
+# Backup files
+*.bak
+*.tmp
+*.log
