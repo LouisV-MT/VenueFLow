@@ -1,14 +1,14 @@
 ﻿using System;
-using System.Collections.Generic;
-using System.Text;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using Microsoft.EntityFrameworkCore;
+using VenueFlow.Data;
+using VenueFlow.Data.Models;
 using VenueFlow.Services;
 
 namespace VenueFlow
@@ -17,10 +17,8 @@ namespace VenueFlow
     /// Interaction logic for SeatingPlanWindow.xaml
     /// </summary>
     public partial class SeatingPlanWindow : Window
-    {
-        public SeatingPlanWindow()
-        {
-            private readonly VenueFlowDbContext _context;
+    {       
+        private readonly VenueFlowDbContext _context;
         private readonly SeatingPlannerService _seatingService;
         private const int WeddingId = 1; // Assuming a single active wedding for MVP
 
@@ -236,6 +234,5 @@ namespace VenueFlow
                 }
             }
         }
-    }
-    }
+    }    
 }

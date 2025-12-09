@@ -1,7 +1,7 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore;
-using VenueFlow; // Assuming this is where your DbContext is located
-using VenueFlow.Models;
+using VenueFlow.Data; // Assuming this is where your DbContext is located
+using VenueFlow.Data.Models;
 using System.Linq;
 
 namespace VenueFlow.Services
