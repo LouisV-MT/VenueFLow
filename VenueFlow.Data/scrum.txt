@@ -34,7 +34,7 @@ Elizabeth
  What will I do today? Seating layouts for Room 1, 2, and 3. with capacities of 22, 42 and 62 guests.
  What impediments are blocking me? Reseraching seating algorythms. Deciding how the UI should look and coordinating.
 
- 2025-12-10
+2025-12-10
 
 Minh
  What did I do yesterday? 
