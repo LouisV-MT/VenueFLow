@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace VenueFlow.Models;
+namespace VenueFlow.Data;
 
 public partial class MenuOption
 {

@@ -1,3 +1,4 @@
 <Solution>
-  <Project Path="VenueFlow.csproj" />
+  <Project Path="VenueFlow.Data/VenueFlow.Data.csproj" />
+  <Project Path="VenueFlow/VenueFlow.csproj" />
 </Solution>

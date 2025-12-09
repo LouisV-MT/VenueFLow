@@ -2,7 +2,7 @@
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
 
-namespace VenueFlow.Models;
+namespace VenueFlow.Data;
 
 public partial class VenueFlowDbContext : DbContext
 {
