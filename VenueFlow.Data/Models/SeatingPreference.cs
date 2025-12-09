@@ -1,7 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 
-namespace VenueFlow.Data;
+namespace VenueFlow.Data.Models;
 
 public partial class SeatingPreference
 {
