@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.EntityFrameworkCore;
 using VenueFlow.Data.Models;
+using VenueFlow.Data;
 
 namespace VenueFlow
 {
