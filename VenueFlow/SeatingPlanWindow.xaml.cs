@@ -1,31 +1,31 @@
-﻿using System;
+﻿using Microsoft.EntityFrameworkCore;
+using System;
 using System.Collections.Generic;
-using System.Text;
+using System.Linq;
+using System.Threading.Tasks;
 using System.Windows;
 using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
+using VenueFlow.Data.Models;
 using VenueFlow.Services;
 
 namespace VenueFlow
 {
-    /// <summary>
-    /// Interaction logic for SeatingPlanWindow.xaml
-    /// </summary>
+    // Helper record for table position calculation
+    public record TableCoordinates(int TableId, int TableNumber, double CenterX, double CenterY, double Radius, int SeatingCapacity);
+
     public partial class SeatingPlanWindow : Window
     {
-        public SeatingPlanWindow()
-        {
-            private readonly VenueFlowDbContext _context;
+        // Assuming your DbContext and models are in these namespaces
+        private readonly VenueFlowDbContext _context;
         private readonly SeatingPlannerService _seatingService;
         private const int WeddingId = 1; // Assuming a single active wedding for MVP
 
-        // Used to track the start point of a drag operation
         private Point _startPoint;
+        private List<TableCoordinates> _currentTableCoordinates = new List<TableCoordinates>();
+
 
         public SeatingPlanWindow(VenueFlowDbContext context, SeatingPlannerService seatingService)
         {
@@ -33,13 +33,14 @@ namespace VenueFlow
             _context = context;
             _seatingService = seatingService;
 
-            // Load and draw the plan when the window opens
             Loaded += SeatingPlanWindow_Loaded;
+
+            // Re-draw when the window is resized to ensure tables fit the canvas
+            SizeChanged += async (s, e) => await DrawRoomLayout(WeddingId);
         }
 
         private async void SeatingPlanWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // Initial draw upon opening
             await DrawRoomLayout(WeddingId);
             await PopulateUnassignedGuests();
         }
@@ -64,7 +65,6 @@ namespace VenueFlow
 
         private void UnassignedGuestsListBox_MouseMove(object sender, MouseEventArgs e)
         {
-            // Get the current mouse position
             Point mousePos = e.GetPosition(null);
             Vector diff = _startPoint - mousePos;
 
@@ -72,13 +72,11 @@ namespace VenueFlow
                 (Math.Abs(diff.X) > SystemParameters.MinimumHorizontalDragDistance ||
                  Math.Abs(diff.Y) > SystemParameters.MinimumVerticalDragDistance))
             {
-                // Get the ListBoxItem being dragged
                 ListBox listBox = sender as ListBox;
                 if (listBox.SelectedItem == null) return;
 
                 string dragData = (string)listBox.SelectedItem;
 
-                // Start the drag-and-drop operation
                 DragDrop.DoDragDrop(listBox, dragData, DragDropEffects.Move);
             }
         }
@@ -90,139 +88,225 @@ namespace VenueFlow
             {
                 string data = (string)e.Data.GetData(DataFormats.StringFormat);
 
-                // Extract Guest ID from the drag data string: [ID:123]
-                var idString = data.Split(new[] { "[ID:", "]" }, StringSplitOptions.None)
+                var idString = data.Split(new[] { "[ID:", "]" }, System.StringSplitOptions.None)
                                    .Skip(1).FirstOrDefault();
                 if (!int.TryParse(idString, out int guestId)) return;
 
-                // Get the drop position on the canvas
                 Point dropPosition = e.GetPosition(SeatingCanvas);
 
-                // Find the nearest table circle to the drop position (Simplified)
-                // In a real app, you would iterate through known table coordinates.
-                // For MVP, we'll just check if it landed near *any* table area
+                // Find the nearest table circle to the drop position
+                var droppedOnTable = _currentTableCoordinates.FirstOrDefault(tc =>
+                    // Check if drop is within the table circle/shape's area (uses standard circle formula for simplicity)
+                    (dropPosition.X - tc.CenterX) * (dropPosition.X - tc.CenterX) +
+                    (dropPosition.Y - tc.CenterY) * (dropPosition.Y - tc.CenterY) <= (tc.Radius * tc.Radius) * 2 // Use 2x radius for easier targeting
+                );
 
-                // **TODO: Implement logic to find the specific TableID where the user dropped the guest**
-
-                int targetTableId = 1; // HARDCODED for testing - REPLACE THIS
-
-                // 1. Update the database (similar to the service logic)
-                var guest = await _context.Guests.FindAsync(guestId);
-                if (guest != null)
+                if (droppedOnTable != null)
                 {
-                    // **TODO: Add constraint check (Must Not Sit With) here before assignment**
+                    int targetTableId = droppedOnTable.TableId;
 
-                    guest.TableId = targetTableId;
-                    await _context.SaveChangesAsync();
+                    var guest = await _context.Guests.FindAsync(guestId);
+                    if (guest != null)
+                    {
+                        // 1. Check Capacity
+                        int currentSeated = await _context.Guests.CountAsync(g => g.TableId == targetTableId);
+                        if (currentSeated >= droppedOnTable.SeatingCapacity)
+                        {
+                            MessageBox.Show($"Table {droppedOnTable.TableNumber} is full ({droppedOnTable.SeatingCapacity} seats).", "Capacity Reached", MessageBoxButton.OK, MessageBoxImage.Warning);
+                            return;
+                        }
 
-                    // 2. Refresh the visualization
-                    await DrawRoomLayout(WeddingId);
-                    await PopulateUnassignedGuests();
+                        // 2. Check MUST NOT SIT WITH constraints
+                        var allPreferences = await _context.SeatingPreferences.ToListAsync();
+                        var groupOfOne = new List<Guest> { guest };
+
+                        // Calls the public method on the Service for the constraint check
+                        if (_seatingService.CheckMustNotSitWithConflict(groupOfOne, targetTableId, allPreferences))
+                        {
+                            // Assignment is valid
+                            guest.TableId = targetTableId;
+                            await _context.SaveChangesAsync();
+
+                            // 3. Refresh the visualization
+                            await DrawRoomLayout(WeddingId);
+                            await PopulateUnassignedGuests();
+                        }
+                        else
+                        {
+                            MessageBox.Show("Cannot seat guest: Conflict with MUST NOT SIT WITH rule.", "Constraint Violation", MessageBoxButton.OK, MessageBoxImage.Warning);
+                        }
+                    }
                 }
             }
         }
 
-        // --- VISUALIZATION METHOD (Copied from previous step) ---
+        // --- ROOM LAYOUT DEFINITION ---
+        private List<TableCoordinates> GetTableCoordinates(int weddingId)
+        {
+            // Ensure canvas dimensions are available before drawing
+            if (SeatingCanvas.ActualWidth == 0 || SeatingCanvas.ActualHeight == 0)
+                return new List<TableCoordinates>();
+
+            double canvasWidth = SeatingCanvas.ActualWidth;
+            double canvasHeight = SeatingCanvas.ActualHeight;
+            double tableRadius = 50;
+            double padding = 50;
+
+            // Note: We use the context directly here, assuming it's available and quick.
+            var tables = _context.Tables.Where(t => t.WeddingId == weddingId).OrderBy(t => t.TableNumber).ToList();
+            if (!tables.Any()) return new List<TableCoordinates>();
+
+            _currentTableCoordinates.Clear(); // Clear and rebuild the coordinate list
+
+            // Determine the room layout based on the number of guest tables (TableNumber > 0)
+            int guestTableCount = tables.Count(t => t.TableNumber > 0);
+
+            // --- 1. Sweetheart Table (Table 0) ---
+            var sweetheart = tables.FirstOrDefault(t => t.TableNumber == 0);
+            if (sweetheart != null)
+            {
+                // Sweetheart Table is always top center (small rectangle)
+                _currentTableCoordinates.Add(new TableCoordinates(
+                    sweetheart.TableId, 0,
+                    canvasWidth / 2, padding + tableRadius, tableRadius * 1.5, // Radius is larger for drawing size
+                    sweetheart.SeatingCapacity));
+            }
+
+            // --- 2. Guest Tables (Layout based on count) ---
+
+            int tablesPerRow = 0;
+            int rowCount = 0;
+
+            if (guestTableCount == 2) { tablesPerRow = 2; rowCount = 1; }
+            else if (guestTableCount == 4) { tablesPerRow = 2; rowCount = 2; }
+            else if (guestTableCount == 6) { tablesPerRow = 3; rowCount = 2; }
+            else { return _currentTableCoordinates; } // Unsupported layout
+
+            double gridAreaTop = padding + tableRadius * 3; // Start below sweetheart table
+            double gridHeight = canvasHeight - gridAreaTop - padding;
+            double tableSpacingX = (canvasWidth - 2 * padding) / tablesPerRow;
+            double tableSpacingY = gridHeight / rowCount;
+
+            var guestTablesList = tables.Where(t => t.TableNumber > 0).ToList();
+
+            for (int i = 0; i < guestTablesList.Count; i++)
+            {
+                var table = guestTablesList[i];
+                int row = i / tablesPerRow;
+                int col = i % tablesPerRow;
+
+                double centerX = padding + (col * tableSpacingX) + (tableSpacingX / 2);
+                double centerY = gridAreaTop + (row * tableSpacingY) + (tableSpacingY / 2);
+
+                _currentTableCoordinates.Add(new TableCoordinates(
+                    table.TableId, table.TableNumber,
+                    centerX, centerY, tableRadius,
+                    table.SeatingCapacity));
+            }
+
+            return _currentTableCoordinates;
+        }
+
+
+        // --- VISUALIZATION DRAWING ---
         private async Task DrawRoomLayout(int weddingId)
         {
-            // ... [Drawing logic remains the same as previously generated] ...
-            SeatingCanvas.Children.Clear(); // Clear old drawings
+            SeatingCanvas.Children.Clear();
 
-            // 1. Get Tables and their currently seated Guests
+            // Recalculate coordinates based on current canvas size
+            var tableCoords = GetTableCoordinates(weddingId);
+
+            // Get current guest status for drawing
             var tables = await _context.Tables
                 .Include(t => t.Guests.Where(g => g.WeddingId == weddingId))
                 .Where(t => t.WeddingId == weddingId)
                 .OrderBy(t => t.TableNumber)
                 .ToListAsync();
 
-            if (!tables.Any()) return;
-
-            // Define drawing parameters
-            double canvasWidth = SeatingCanvas.ActualWidth;
-            double canvasHeight = SeatingCanvas.ActualHeight;
-            double tableRadius = 50;
-            double padding = 20;
-
-            // Simple grid layout calculation for tables (e.g., 3 tables per row)
-            int tablesPerRow = 3;
-            int rowCount = (int)Math.Ceiling((double)tables.Count / tablesPerRow);
-
-            double tableSpacingX = (canvasWidth - 2 * padding) / tablesPerRow;
-            double tableSpacingY = (canvasHeight - 2 * padding) / rowCount;
-
-            for (int i = 0; i < tables.Count; i++)
+            foreach (var coord in tableCoords)
             {
-                var table = tables[i];
-                int row = i / tablesPerRow;
-                int col = i % tablesPerRow;
+                var table = tables.FirstOrDefault(t => t.TableId == coord.TableId);
+                if (table == null) continue;
 
-                // Calculate center coordinates
-                double centerX = padding + (col * tableSpacingX) + (tableSpacingX / 2);
-                double centerY = padding + (row * tableSpacingY) + (tableSpacingY / 2);
-
-                // --- Draw Table Circle ---
-                Ellipse tableShape = new Ellipse
+                // --- Draw Table Shape (Rectangle for Table 0, Ellipse for others) ---
+                Shape tableShape;
+                if (table.TableNumber == 0)
                 {
-                    Width = tableRadius * 2,
-                    Height = tableRadius * 2,
-                    Fill = Brushes.LightGray,
-                    Stroke = Brushes.Gray,
-                    StrokeThickness = 2
-                };
-
-                // Position the circle on the Canvas
-                Canvas.SetLeft(tableShape, centerX - tableRadius);
-                Canvas.SetTop(tableShape, centerY - tableRadius);
+                    tableShape = new Rectangle
+                    {
+                        Width = coord.Radius * 3, // Sweetheart table is wider
+                        Height = coord.Radius * 1.5,
+                        Fill = Brushes.LightSteelBlue,
+                        Stroke = Brushes.MidnightBlue,
+                        StrokeThickness = 2
+                    };
+                    Canvas.SetLeft(tableShape, coord.CenterX - tableShape.Width / 2);
+                    Canvas.SetTop(tableShape, coord.CenterY - tableShape.Height / 2);
+                }
+                else
+                {
+                    tableShape = new Ellipse
+                    {
+                        Width = coord.Radius * 2,
+                        Height = coord.Radius * 2,
+                        Fill = Brushes.LightGray,
+                        Stroke = Brushes.Gray,
+                        StrokeThickness = 2
+                    };
+                    Canvas.SetLeft(tableShape, coord.CenterX - coord.Radius);
+                    Canvas.SetTop(tableShape, coord.CenterY - coord.Radius);
+                }
                 SeatingCanvas.Children.Add(tableShape);
 
-                // --- Add Table Number Text ---
+                // --- Add Table Number/Info Text ---
                 TextBlock tableText = new TextBlock
                 {
-                    Text = $"Table {table.TableNumber}\n({table.Guests.Count}/{table.SeatingCapacity})",
+                    Text = (table.TableNumber == 0 ? "Sweetheart Table" : $"Table {table.TableNumber}")
+                         + $"\n({table.Guests.Count}/{table.SeatingCapacity})",
                     HorizontalAlignment = HorizontalAlignment.Center,
                     TextAlignment = TextAlignment.Center,
-                    FontSize = 10,
+                    FontSize = (table.TableNumber == 0) ? 12 : 10,
                     FontWeight = FontWeights.Bold
                 };
-                Canvas.SetLeft(tableText, centerX - 40);
-                Canvas.SetTop(tableText, centerY - 15);
+                Canvas.SetLeft(tableText, coord.CenterX - 60);
+                Canvas.SetTop(tableText, coord.CenterY - 15);
                 SeatingCanvas.Children.Add(tableText);
 
                 // --- Draw Guest Seats around the table ---
                 int seatedCount = table.Guests.Count;
-                if (seatedCount > 0)
+                if (seatedCount > 0 && table.SeatingCapacity > 0)
                 {
-                    // Angle calculation for evenly spaced seats
+                    double currentRadius = coord.Radius;
                     double angleStep = 360.0 / table.SeatingCapacity;
                     double startAngle = 0;
 
                     for (int j = 0; j < seatedCount; j++)
                     {
-                        var guest = table.Guests.Skip(j).First(); // Get the j-th seated guest
+                        var guest = table.Guests.Skip(j).First();
                         double angle = startAngle + (j * angleStep);
                         double radians = angle * (Math.PI / 180.0);
 
-                        // Calculate position slightly outside the table radius
-                        double seatX = centerX + (tableRadius + 15) * Math.Cos(radians);
-                        double seatY = centerY + (tableRadius + 15) * Math.Sin(radians);
+                        // Calculate position slightly outside the table shape
+                        double seatX = coord.CenterX + (currentRadius + 15) * Math.Cos(radians);
+                        double seatY = coord.CenterY + (currentRadius + 15) * Math.Sin(radians);
 
-                        // Seat Rectangle (the "rectangle in each spot")
+                        // Seat Rectangle 
                         Rectangle seatRect = new Rectangle
                         {
                             Width = 60,
                             Height = 30,
-                            Fill = (guest.Allergies != null && guest.Allergies.Length > 0) ? Brushes.Red : Brushes.SteelBlue, // Highlight based on allergies
+                            // Red if allergy, Blue otherwise
+                            Fill = (guest.Allergies != null && guest.Allergies.Length > 0) ? Brushes.Red : Brushes.SteelBlue,
                             Stroke = Brushes.DarkBlue,
                             StrokeThickness = 1
                         };
-                        Canvas.SetLeft(seatRect, seatX - 30); // Center the rectangle
+                        Canvas.SetLeft(seatRect, seatX - 30);
                         Canvas.SetTop(seatRect, seatY - 15);
                         SeatingCanvas.Children.Add(seatRect);
 
                         // Guest Name and Menu Preference Text
                         TextBlock guestText = new TextBlock
                         {
-                            // Display Name and a short menu/dietary marker
                             Text = $"{guest.GuestName.Split(' ')[0]}\n({guest.DietaryRestrictions})",
                             FontSize = 9,
                             Foreground = Brushes.White,
@@ -236,6 +320,5 @@ namespace VenueFlow
                 }
             }
         }
-    }
     }
 }

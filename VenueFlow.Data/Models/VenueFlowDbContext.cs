@@ -76,7 +76,7 @@ public partial class VenueFlowDbContext : DbContext
             entity.Property(e => e.PreferenceId).HasColumnName("PreferenceID");
             entity.Property(e => e.GuestIdSource).HasColumnName("GuestID_Source");
             entity.Property(e => e.GuestIdTarget).HasColumnName("GuestID_Target");
-            entity.Property(e => e.Type).HasMaxLength(20);
+            entity.Property(e => e.IsMustSitWith).HasColumnName("IsMustSitWith");
 
             entity.HasOne(d => d.GuestIdSourceNavigation).WithMany(p => p.SeatingPreferenceGuestIdSourceNavigations)
                 .HasForeignKey(d => d.GuestIdSource)

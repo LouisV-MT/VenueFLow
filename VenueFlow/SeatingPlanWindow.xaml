@@ -15,7 +15,7 @@
         <!-- LEFT PANEL: Unassigned Guests for Drag & Drop -->
         <StackPanel Grid.Column="0" Margin="10">
             <TextBlock Text="Unassigned Guests" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
-            <TextBlock Text="Drag guests from here onto open seats on the canvas." 
+            <TextBlock Text="Drag guests from here onto open seats on the canvas. Manual assignments check capacity and MUST NOT SIT WITH rules." 
                        TextWrapping="Wrap" FontStyle="Italic" Margin="0,0,0,10"/>
 
             <!-- ListBox will be populated with unseated guests -->
