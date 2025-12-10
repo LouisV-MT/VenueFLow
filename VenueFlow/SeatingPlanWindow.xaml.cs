@@ -12,7 +12,7 @@ using VenueFlow.Data;
 using VenueFlow.Data.Models;
 using VenueFlow.Services;
 
-// Updated Record: Includes Width/Height specifically for drawing logic
+// Helper record for table position calculation
 public record TableCoordinates(int TableId, int TableNumber, double CenterX, double CenterY, double Width, double Height, int SeatingCapacity);
 
 namespace VenueFlow
@@ -34,28 +34,19 @@ namespace VenueFlow
             _weddingId = weddingId;
 
             Loaded += SeatingPlanWindow_Loaded;
-            SizeChanged += SizeChangedIsolationHandler;
         }
 
         private async void SeatingPlanWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            // 1. Ensure Tables Exist FIRST
+            // Ensure Tables Exist FIRST
             await EnsureTablesExistAsync();
 
-            // 2. Run Algorithm (Now that tables definitely exist)
+            // Run Algorithm (Now that tables definitely exist)
             await _seatingService.AutoSeatGuests(_weddingId);
 
-            // 3. Draw
+            // Draw
             await DrawRoomLayoutIsolated();
             await PopulateUnassignedGuestsIsolated();
-        }
-
-        private async void SizeChangedIsolationHandler(object sender, SizeChangedEventArgs e)
-        {
-            if (SeatingCanvas.ActualWidth > 0 && SeatingCanvas.ActualHeight > 0)
-            {
-                await DrawRoomLayoutIsolated();
-            }
         }
 
         // --- DATA & LOGIC ---
@@ -64,25 +55,52 @@ namespace VenueFlow
         {
             using (var isolatedContext = new VenueFlowDbContext())
             {
-                bool tablesExist = await isolatedContext.Tables.AnyAsync(t => t.WeddingId == _weddingId);
-                if (tablesExist) return;
-
+                // Determine Target Table Count based on Wedding Room Capacity
                 var wedding = await isolatedContext.Weddings.FindAsync(_weddingId);
                 if (wedding == null) return;
 
-                int guestTableCount = 6; // Default
-                if (wedding.RoomCapacity <= 22) guestTableCount = 2;
-                else if (wedding.RoomCapacity <= 42) guestTableCount = 4;
+                int targetGuestTables;
+                if (wedding.RoomCapacity <= 22) targetGuestTables = 2;
+                else if (wedding.RoomCapacity <= 42) targetGuestTables = 4;
+                else targetGuestTables = 6; // Default/Large
 
-                // Create Sweetheart (Capacity 2)
-                isolatedContext.Tables.Add(new Table { WeddingId = _weddingId, TableNumber = 0, SeatingCapacity = 2 });
+                // Check what we currently have
+                // Count guest tables (TableNumber > 0)
+                int currentGuestTables = await isolatedContext.Tables
+                    .CountAsync(t => t.WeddingId == _weddingId && t.TableNumber > 0);
 
-                // Create Guest Tables (Capacity 10)
-                for (int i = 1; i <= guestTableCount; i++)
+                // Check for Sweetheart table
+                bool sweetheartExists = await isolatedContext.Tables
+                    .AnyAsync(t => t.WeddingId == _weddingId && t.TableNumber == 0);
+
+                bool changesMade = false;
+
+                // Add Sweetheart if missing
+                if (!sweetheartExists)
                 {
-                    isolatedContext.Tables.Add(new Table { WeddingId = _weddingId, TableNumber = i, SeatingCapacity = 10 });
+                    isolatedContext.Tables.Add(new Table { WeddingId = _weddingId, TableNumber = 0, SeatingCapacity = 2 });
+                    changesMade = true;
                 }
-                await isolatedContext.SaveChangesAsync();
+
+                // Add missing Guest Tables (if we upgraded the room size)
+                if (currentGuestTables < targetGuestTables)
+                {
+                    for (int i = currentGuestTables + 1; i <= targetGuestTables; i++)
+                    {
+                        isolatedContext.Tables.Add(new Table
+                        {
+                            WeddingId = _weddingId,
+                            TableNumber = i,
+                            SeatingCapacity = 10
+                        });
+                    }
+                    changesMade = true;
+                }
+
+                if (changesMade)
+                {
+                    await isolatedContext.SaveChangesAsync();
+                }
             }
         }
 
@@ -189,27 +207,35 @@ namespace VenueFlow
             }
         }
 
-        // --- DRAWING LOGIC (VISUAL FIXES) ---
+        // --- DRAWING LOGIC ---
 
         private List<TableCoordinates> GetTableCoordinates(int weddingId, List<Table> tables)
         {
-            // Fallback size if canvas isn't ready
-            double canvasWidth = SeatingCanvas.ActualWidth > 0 ? SeatingCanvas.ActualWidth : 1200;
-            double canvasHeight = SeatingCanvas.ActualHeight > 0 ? SeatingCanvas.ActualHeight : 800;
-
-            // Larger radius for guest tables to fit 10 people
-            double guestTableRadius = 90;
-            // Smaller size for Sweetheart table
-            double sweetheartWidth = 140;
-            double sweetheartHeight = 70;
-
-            double padding = 60;
-
             if (!tables.Any()) return new List<TableCoordinates>();
 
             _currentTableCoordinates.Clear();
 
             int guestTableCount = tables.Count(t => t.TableNumber > 0);
+
+            // --- Layout Constants ---
+            // Large fixed sizes to ensure no overlapping
+            double cellWidth = 350;
+            double cellHeight = 350;
+            double sweetheartAreaHeight = 250;
+
+            // Calculate how many columns we want based on total tables
+            int tablesPerRow = 2; // Default for small
+            if (guestTableCount >= 5) tablesPerRow = 3; // Wider for large weddings
+
+            int rowCount = (int)Math.Ceiling((double)guestTableCount / tablesPerRow);
+
+            // CALCULATE CANVAS SIZE
+            // We set the canvas size explicitly. The ScrollViewer will see this and enable scrolling.
+            double totalCanvasWidth = Math.Max(1000, (tablesPerRow * cellWidth) + 100);
+            double totalCanvasHeight = sweetheartAreaHeight + (rowCount * cellHeight) + 100;
+
+            SeatingCanvas.Width = totalCanvasWidth;
+            SeatingCanvas.Height = totalCanvasHeight;
 
             // Sweetheart (Top Center)
             var sweetheart = tables.FirstOrDefault(t => t.TableNumber == 0);
@@ -217,29 +243,17 @@ namespace VenueFlow
             {
                 _currentTableCoordinates.Add(new TableCoordinates(
                     sweetheart.TableId, 0,
-                    canvasWidth / 2, padding + (sweetheartHeight / 2),
-                    sweetheartWidth, sweetheartHeight,
+                    totalCanvasWidth / 2,
+                    100, // Fixed top offset 
+                    160, 80, // Size
                     sweetheart.SeatingCapacity));
             }
 
-            // Guest Table Layout
-            int tablesPerRow = 0;
-            int rowCount = 0;
-
-            // Logic for rows based on count
-            if (guestTableCount <= 2) { tablesPerRow = 2; rowCount = 1; }
-            else if (guestTableCount <= 4) { tablesPerRow = 2; rowCount = 2; }
-            else { tablesPerRow = 3; rowCount = (int)Math.Ceiling((double)guestTableCount / 3); }
-
-            // Define grid area below sweetheart table
-            double gridAreaTop = padding + sweetheartHeight + padding;
-            double gridHeight = canvasHeight - gridAreaTop - padding;
-
-            // Calculate spacing cells
-            double cellWidth = (canvasWidth - (2 * padding)) / Math.Max(1, tablesPerRow);
-            double cellHeight = gridHeight / Math.Max(1, rowCount);
-
+            // Guest Tables
             var guestTablesList = tables.Where(t => t.TableNumber > 0).OrderBy(t => t.TableNumber).ToList();
+
+            // Calculate starting X to center the grid horizontally
+            double gridStartX = (totalCanvasWidth - (tablesPerRow * cellWidth)) / 2;
 
             for (int i = 0; i < guestTablesList.Count; i++)
             {
@@ -247,15 +261,14 @@ namespace VenueFlow
                 int row = i / tablesPerRow;
                 int col = i % tablesPerRow;
 
-                // Center within the grid cell
-                double centerX = padding + (col * cellWidth) + (cellWidth / 2);
-                double centerY = gridAreaTop + (row * cellHeight) + (cellHeight / 2);
+                // Center of the cell
+                double centerX = gridStartX + (col * cellWidth) + (cellWidth / 2);
+                double centerY = sweetheartAreaHeight + (row * cellHeight) + (cellHeight / 2);
 
-                // Use Diameter (Radius * 2) for width/height storage
                 _currentTableCoordinates.Add(new TableCoordinates(
                     table.TableId, table.TableNumber,
                     centerX, centerY,
-                    guestTableRadius * 2, guestTableRadius * 2,
+                    180, 180, // 180 diameter = 90 radius (Matches visual logic)
                     table.SeatingCapacity));
             }
 
@@ -326,32 +339,47 @@ namespace VenueFlow
                 Canvas.SetTop(tableLabel, coord.CenterY - (tableLabel.DesiredSize.Height / 2));
                 SeatingCanvas.Children.Add(tableLabel);
 
-                // Draw Seats (Placemats)
+                // Draw Placemats
                 int seatedCount = table.Guests.Count;
                 if (seatedCount > 0)
                 {
-                    // Distance from center to seat center. 
-                    // Use half width (Radius) + extra buffer for placemat size
-                    double layoutRadius = (coord.Width / 2) + 35;
-
-                    // Angle setup: Sweetheart (2 seats) needs different angles than Round (10 seats)
-                    double startAngle = (table.TableNumber == 0) ? 180 : -90;
-                    double angleStep = (table.TableNumber == 0) ? 180 : (360.0 / table.SeatingCapacity);
-
-                    // We iterate through CAPACITY (drawing empty seats if needed?) 
-                    // For now, let's just draw the seated guests.
                     for (int j = 0; j < seatedCount; j++)
                     {
                         var guest = table.Guests.Skip(j).First();
 
-                        double angle = startAngle + (j * angleStep);
-                        double radians = angle * (Math.PI / 180.0);
+                        double seatX, seatY;
+                        double rotationAngle;
 
-                        // Position calculation
-                        double seatX = coord.CenterX + layoutRadius * Math.Cos(radians);
-                        double seatY = coord.CenterY + layoutRadius * Math.Sin(radians);
+                        // --- CUSTOM LOGIC FOR SWEETHEART TABLE (Table 0) ---
+                        if (table.TableNumber == 0)
+                        {
+                            // Place seats side-by-side ABOVE the table (linear layout)
+                            double spacing = 70; // Distance between seats
+                            double totalWidth = spacing * (seatedCount - 1);
+                            double startX = coord.CenterX - (totalWidth / 2);
 
-                        // Placemat Rectangle
+                            seatX = startX + (j * spacing);
+                            seatY = coord.CenterY - (coord.Height / 2) - 25; // 25px buffer above top edge
+
+                            rotationAngle = 0; // No rotation (Horizontal)
+                        }
+                        else
+                        {
+                            // --- STANDARD CIRCULAR LOGIC FOR GUEST TABLES ---
+                            double layoutRadius = (coord.Width / 2) + 35;
+                            double angleStep = 360.0 / table.SeatingCapacity;
+                            double startAngle = -90; // Start at top
+
+                            double angle = startAngle + (j * angleStep);
+                            double radians = angle * (Math.PI / 180.0);
+
+                            seatX = coord.CenterX + layoutRadius * Math.Cos(radians);
+                            seatY = coord.CenterY + layoutRadius * Math.Sin(radians);
+
+                            rotationAngle = angle + 90; // Rotate to face center
+                        }
+
+                        // Placemat
                         Rectangle placemat = new Rectangle
                         {
                             Width = 60,
@@ -363,8 +391,7 @@ namespace VenueFlow
                             RadiusY = 2
                         };
 
-                        // Rotate placemat to face center (Optional visual flair)
-                        RotateTransform rotate = new RotateTransform(angle + 90);
+                        RotateTransform rotate = new RotateTransform(rotationAngle);
                         placemat.RenderTransformOrigin = new Point(0.5, 0.5);
                         placemat.RenderTransform = rotate;
 
@@ -372,23 +399,24 @@ namespace VenueFlow
                         Canvas.SetTop(placemat, seatY - 15);
                         SeatingCanvas.Children.Add(placemat);
 
-                        // Guest Name
+                        // Text
                         TextBlock nameText = new TextBlock
                         {
-                            Text = guest.GuestName.Split(' ')[0], // First name only for space
-                            FontSize = 10,
-                            FontWeight = FontWeights.SemiBold,
+                            Text = $"{guest.GuestName.Split(' ')[0]}\n({(string.IsNullOrEmpty(guest.DietaryRestrictions) ? "" : "Diet")})",
+                            FontSize = 9,
+                            Foreground = Brushes.Black,
                             HorizontalAlignment = HorizontalAlignment.Center,
+                            VerticalAlignment = VerticalAlignment.Center,
                             TextAlignment = TextAlignment.Center,
                             Width = 60,
-                            TextTrimming = TextTrimming.CharacterEllipsis,
-                            ToolTip = $"{guest.GuestName}\n{guest.DietaryRestrictions ?? "None"}\n{guest.Allergies ?? "None"}"
+                            Height = 30,
+                            TextTrimming = TextTrimming.CharacterEllipsis
                         };
+                        nameText.RenderTransformOrigin = new Point(0.5, 0.5);
+                        nameText.RenderTransform = rotate;
 
-                        // Rotate text to match placemat? Maybe keep text horizontal for readability.
-                        // Let's keep text horizontal but centered on placemat.
                         Canvas.SetLeft(nameText, seatX - 30);
-                        Canvas.SetTop(nameText, seatY - 7); // Vertically center in 30px height
+                        Canvas.SetTop(nameText, seatY - 15);
                         SeatingCanvas.Children.Add(nameText);
                     }
                 }
