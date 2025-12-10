@@ -128,8 +128,10 @@ namespace VenueFlow
         {
             if ((sender as FrameworkElement)?.DataContext is WeddingUiItem selectedItem)
             {
-                // TODO: Open the Dashboard Window here
-                MessageBox.Show($"Opening: {selectedItem.Wedding.Name}", "Opening Dashboard");
+                
+                var detailsWindow = new WeddingDetailsWindow(selectedItem.Wedding.WeddingId);
+                detailsWindow.Show();
+                this.Close(); 
             }
         }
     }
