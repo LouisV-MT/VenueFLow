@@ -3,6 +3,7 @@
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
         mc:Ignorable="d"
         Title="Seating Plan Visualization and Manual Adjustment" Height="700" Width="1200">
 
@@ -12,13 +13,11 @@
             <ColumnDefinition Width="*"/>
         </Grid.ColumnDefinitions>
 
-        <!-- LEFT PANEL: Unassigned Guests for Drag & Drop -->
         <StackPanel Grid.Column="0" Margin="10">
             <TextBlock Text="Unassigned Guests" FontSize="18" FontWeight="Bold" Margin="0,0,0,10"/>
             <TextBlock Text="Drag guests from here onto open seats on the canvas. Manual assignments check capacity and MUST NOT SIT WITH rules." 
                        TextWrapping="Wrap" FontStyle="Italic" Margin="0,0,0,10"/>
 
-            <!-- ListBox will be populated with unseated guests -->
             <ListBox x:Name="UnassignedGuestsListBox" Height="600" 
                      AllowDrop="True" 
                      Drop="SeatingCanvas_Drop" 
@@ -27,17 +26,27 @@
 
         </StackPanel>
 
-        <!-- RIGHT PANEL: Seating Visualization Canvas -->
         <Grid Grid.Column="1" Background="#F0F0F0" Margin="10">
-            <TextBlock Text="Floor Plan Canvas" FontSize="20" FontWeight="Bold" 
-                       VerticalAlignment="Top" HorizontalAlignment="Left" Margin="10,10,0,0" Panel.ZIndex="1"/>
 
-            <!-- SCROLLVIEWER ADDED HERE -->
+            <DockPanel VerticalAlignment="Top" Margin="10,10,20,5" Panel.ZIndex="1">
+                <TextBlock Text="Floor Plan Canvas" FontSize="20" FontWeight="Bold" VerticalAlignment="Center"/>
+
+                <Button DockPanel.Dock="Right" HorizontalAlignment="Right"
+                        Click="BtnExport_Click"
+                        Style="{StaticResource MaterialDesignRaisedButton}"
+                        Height="30" Padding="10,0" Margin="10,0,0,0"
+                        materialDesign:ButtonAssist.CornerRadius="15">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Printer" Margin="0,0,5,0" VerticalAlignment="Center"/>
+                        <TextBlock Text="PRINT / EXPORT" FontSize="12" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </Button>
+            </DockPanel>
+
             <ScrollViewer HorizontalScrollBarVisibility="Auto" 
                           VerticalScrollBarVisibility="Auto" 
-                          PanningMode="Both">
-
-                <!-- Canvas is now inside. We removed the Margin to let it grow. -->
+                          PanningMode="Both"
+                          Margin="0,50,0,0">
                 <Canvas x:Name="SeatingCanvas" 
                         Background="White"
                         AllowDrop="True" 

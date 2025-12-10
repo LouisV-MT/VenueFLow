@@ -7,6 +7,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
+using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using VenueFlow.Data;
 using VenueFlow.Data.Models;
@@ -132,6 +133,8 @@ namespace VenueFlow
             {
                 var tables = await isolatedContext.Tables
                     .Include(t => t.Guests.Where(g => g.WeddingId == _weddingId))
+                    .ThenInclude(g => g.MenuOption)
+
                     .Where(t => t.WeddingId == _weddingId)
                     .OrderBy(t => t.TableNumber)
                     .ToListAsync();
@@ -660,9 +663,11 @@ namespace VenueFlow
 
                         // Text (Name + Optional Diet)
                         string dietText = (string.IsNullOrEmpty(guest.DietaryRestrictions) || guest.DietaryRestrictions == "None") ? "" : $"\n({guest.DietaryRestrictions})";
+                        string mealName = guest.MenuOption != null ? guest.MenuOption.OptionName : "-";
+                        if (mealName.Length > 9) mealName = mealName.Substring(0, 7) + "..";
                         TextBlock nameText = new TextBlock
                         {
-                            Text = $"{guest.GuestName.Split(' ')[0]}{dietText}",
+                            Text = $"{guest.GuestName.Split(' ')[0]}{dietText}\n{mealName}",
                             FontSize = 9,
                             Foreground = Brushes.Black,
                             HorizontalAlignment = HorizontalAlignment.Center,
@@ -706,6 +711,39 @@ namespace VenueFlow
             Canvas.SetLeft(emptyPlacemat, seatPoint.X - 30);
             Canvas.SetTop(emptyPlacemat, seatPoint.Y - 15);
             SeatingCanvas.Children.Add(emptyPlacemat);
+        }
+        public RenderTargetBitmap CaptureCurrentScreen()
+        {
+            SeatingCanvas.UpdateLayout();
+
+            Rect bounds = VisualTreeHelper.GetDescendantBounds(SeatingCanvas);
+
+            
+            if (bounds.Width == 0 || bounds.Height == 0) bounds = new Rect(0, 0, 800, 600);
+
+            
+            RenderTargetBitmap rtb = new RenderTargetBitmap((int)bounds.Width, (int)bounds.Height, 96, 96, PixelFormats.Pbgra32);
+
+            DrawingVisual dv = new DrawingVisual();
+            using (DrawingContext ctx = dv.RenderOpen())
+            {
+                ctx.DrawRectangle(Brushes.White, null, new Rect(new Point(), bounds.Size));
+
+                VisualBrush vb = new VisualBrush(SeatingCanvas);
+                ctx.DrawRectangle(vb, null, new Rect(new Point(), bounds.Size));
+            }
+
+            rtb.Render(dv);
+            return rtb;
+        }
+        private void BtnExport_Click(object sender, RoutedEventArgs e)
+        {
+            
+            RenderTargetBitmap image = CaptureCurrentScreen();
+
+            var preview = new PrintPreviewWindow(image);
+            preview.Owner = this;
+            preview.ShowDialog();
         }
     }
 }

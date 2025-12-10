@@ -11,11 +11,9 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.EntityFrameworkCore;
 using VenueFlow.Data.Models;
-<<<<<<< HEAD
 using VenueFlow.Data;
-=======
 using VenueFlow.Services;
->>>>>>> 07fc212a2eb85a3886406ecb9aa8dbe474c6e4ad
+
 
 namespace VenueFlow
 {
@@ -25,6 +23,7 @@ namespace VenueFlow
     public partial class WeddingDetailsWindow : Window
     {
         private int _weddingId;
+        private List<Guest> _allGuests;
 
         public WeddingDetailsWindow(int weddingId)
         {
@@ -48,6 +47,7 @@ namespace VenueFlow
                                     .Include(g => g.MenuOption)
                                     .Where(g => g.WeddingId == _weddingId)
                                     .ToList();
+                _allGuests = guests;
 
                 ListGuests.ItemsSource = guests;
 
@@ -97,6 +97,25 @@ namespace VenueFlow
                     context.SaveChanges();
                     MessageBox.Show("Changes Saved!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
+            }
+        }
+        private void TxtSearch_TextChanged(object sender, TextChangedEventArgs e)
+        {
+            var textBox = sender as TextBox;
+            if (_allGuests == null) return;
+
+            string filter = textBox.Text.ToLower();
+
+            if (string.IsNullOrWhiteSpace(filter))
+            {
+                ListGuests.ItemsSource = _allGuests;
+            }
+            else
+            {
+                ListGuests.ItemsSource = _allGuests.Where(g =>
+                    (g.GuestName != null && g.GuestName.ToLower().Contains(filter)) ||
+                    (g.FamilyGroup != null && g.FamilyGroup.ToLower().Contains(filter))
+                ).ToList();
             }
         }
 
