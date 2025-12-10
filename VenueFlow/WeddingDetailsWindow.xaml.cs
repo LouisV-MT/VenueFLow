@@ -11,6 +11,7 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.EntityFrameworkCore;
 using VenueFlow.Data.Models;
+using VenueFlow.Services;
 
 namespace VenueFlow
 {
@@ -97,8 +98,19 @@ namespace VenueFlow
 
         private void BtnSeatingPlan_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Coming Next: The Drag and Drop Canvas!", "Coming Soon");
-            // Next Step: new SeatingChartWindow(_weddingId).Show();
+            // Open the Seating Plan window for this wedding
+            // Create a DbContext and SeatingPlannerService and pass them to the window
+            var context = new VenueFlowDbContext();
+            var seatingService = new SeatingPlannerService(context);
+
+            var seatingWindow = new SeatingPlanWindow(context, seatingService, _weddingId);
+            seatingWindow.Show();
+
+            // Close this details window to mirror the behavior used elsewhere in the app
+            this.Close();
+
+            // Note: SeatingPlanWindow currently contains a hard-coded wedding id; the window will need
+            // further updates if it should accept and honor the current _weddingId.
         }
     }
 }
