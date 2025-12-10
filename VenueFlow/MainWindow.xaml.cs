@@ -128,10 +128,16 @@ namespace VenueFlow
         {
             if ((sender as FrameworkElement)?.DataContext is WeddingUiItem selectedItem)
             {
-                
-                var detailsWindow = new WeddingDetailsWindow(selectedItem.Wedding.WeddingId);
-                detailsWindow.Show();
-                this.Close(); 
+                var detailsWindow = new WeddingDetailsWindow(selectedItem.Wedding.WeddingId)
+                {
+                    Owner = this,
+                    WindowStartupLocation = WindowStartupLocation.CenterOwner
+                };
+
+                // Open details as modal over MainWindow; closing details returns to MainWindow
+                detailsWindow.ShowDialog();
+
+                // Do not close the main window here so closing details returns to it
             }
         }
     }
