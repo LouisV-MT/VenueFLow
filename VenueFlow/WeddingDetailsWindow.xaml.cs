@@ -98,8 +98,6 @@ namespace VenueFlow
 
         private void BtnSeatingPlan_Click(object sender, RoutedEventArgs e)
         {
-            MessageBox.Show("Coming Next: The Drag and Drop Canvas!", "Coming Soon");
-            // Next Step: new SeatingChartWindow(_weddingId).Show();
         }
     }
 }
