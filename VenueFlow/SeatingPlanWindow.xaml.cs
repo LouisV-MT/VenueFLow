@@ -64,10 +64,11 @@ namespace VenueFlow
                 else if (wedding.RoomCapacity <= 42) targetGuestTables = 4;
                 else targetGuestTables = 6; // Default/Large
 
-                // Check what we currently have
-                // Count guest tables (TableNumber > 0)
-                int currentGuestTables = await isolatedContext.Tables
-                    .CountAsync(t => t.WeddingId == _weddingId && t.TableNumber > 0);
+                // Fetch existing tables to compare
+                var existingGuestTables = await isolatedContext.Tables
+                    .Where(t => t.WeddingId == _weddingId && t.TableNumber > 0)
+                    .OrderBy(t => t.TableNumber)
+                    .ToListAsync();
 
                 // Check for Sweetheart table
                 bool sweetheartExists = await isolatedContext.Tables
@@ -82,10 +83,12 @@ namespace VenueFlow
                     changesMade = true;
                 }
 
+                int currentCount = existingGuestTables.Count;
+
                 // Add missing Guest Tables (if we upgraded the room size)
-                if (currentGuestTables < targetGuestTables)
+                if (currentCount < targetGuestTables)
                 {
-                    for (int i = currentGuestTables + 1; i <= targetGuestTables; i++)
+                    for (int i = currentCount + 1; i <= targetGuestTables; i++)
                     {
                         isolatedContext.Tables.Add(new Table
                         {
@@ -93,6 +96,27 @@ namespace VenueFlow
                             TableNumber = i,
                             SeatingCapacity = 10
                         });
+                    }
+                    changesMade = true;
+                }
+                // We have TOO MANY tables (Downgrade)
+                else if (currentCount > targetGuestTables)
+                {
+                    // Find tables with TableNumber > target
+                    var tablesToRemove = existingGuestTables
+                        .Where(t => t.TableNumber > targetGuestTables)
+                        .ToList();
+
+                    // Unseat guests from these tables first to prevent errors
+                    foreach (var table in tablesToRemove)
+                    {
+                        var guestsToUnseat = await isolatedContext.Guests
+                            .Where(g => g.TableId == table.TableId)
+                            .ToListAsync();
+
+                        foreach (var g in guestsToUnseat) g.TableId = null;
+
+                        isolatedContext.Tables.Remove(table);
                     }
                     changesMade = true;
                 }
@@ -400,9 +424,13 @@ namespace VenueFlow
                         SeatingCanvas.Children.Add(placemat);
 
                         // Text
+                        string dietText = (string.IsNullOrEmpty(guest.DietaryRestrictions) || guest.DietaryRestrictions == "None")
+                                          ? ""
+                                          : $"\n({guest.DietaryRestrictions})";
+
                         TextBlock nameText = new TextBlock
                         {
-                            Text = $"{guest.GuestName.Split(' ')[0]}\n({(string.IsNullOrEmpty(guest.DietaryRestrictions) ? "" : "Diet")})",
+                            Text = $"{guest.GuestName.Split(' ')[0]}{dietText}",
                             FontSize = 9,
                             Foreground = Brushes.Black,
                             HorizontalAlignment = HorizontalAlignment.Center,
