@@ -11,7 +11,11 @@ using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using Microsoft.EntityFrameworkCore;
 using VenueFlow.Data.Models;
+<<<<<<< HEAD
 using VenueFlow.Data;
+=======
+using VenueFlow.Services;
+>>>>>>> 07fc212a2eb85a3886406ecb9aa8dbe474c6e4ad
 
 namespace VenueFlow
 {
@@ -98,6 +102,20 @@ namespace VenueFlow
 
         private void BtnSeatingPlan_Click(object sender, RoutedEventArgs e)
         {
+            // Create a DbContext and SeatingPlannerService and pass them to the window
+            var context = new VenueFlowDbContext();
+            var seatingService = new SeatingPlannerService(context);
+
+            var seatingWindow = new SeatingPlanWindow(context, seatingService, _weddingId)
+            {
+                Owner = this,
+                WindowStartupLocation = WindowStartupLocation.CenterOwner
+            };
+
+            // Open as a modal so the details window stays underneath and reappears when closed
+            seatingWindow.ShowDialog();
+
+            // Do not call this.Close(); leaving the details window open underneath
         }
     }
 }
