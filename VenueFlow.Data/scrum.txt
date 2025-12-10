@@ -37,14 +37,14 @@ Elizabeth
 2025-12-10
 
 Minh
- What did I do yesterday? 
- What will I do today? 
- What impediments are blocking me? 
+ What did I do yesterday? Work on the second window of where users see the guest list of a single wedding and can edit.
+ What will I do today? Add printing functionality for floor plan. Prepare presentation.
+ What impediments are blocking me? N/A
 
 Elizabeth
- What did I do yesterday? 
- What will I do today? 
- What impediments are blocking me? 
+ What did I do yesterday? Seating layouts for Room 1, 2, and 3. with capacities of 22, 42 and 62 guests.
+ What will I do today? Debugging drag and drop functionality for seating arrangement.Prepare presentation.
+ What impediments are blocking me? Buggs with the drag and drop functionality.
 
  2025-12-11
 

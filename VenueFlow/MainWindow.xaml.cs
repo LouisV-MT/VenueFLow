@@ -137,6 +137,9 @@ namespace VenueFlow
                 // Open details as modal over MainWindow; closing details returns to MainWindow
                 detailsWindow.ShowDialog();
 
+                // Refresh the list after the details window closes so the main list reflects any edits (date, name, capacity, etc.)
+                LoadWeddings();
+
                 // Do not close the main window here so closing details returns to it
             }
         }
