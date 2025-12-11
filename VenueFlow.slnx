@@ -1,4 +1,5 @@
 <Solution>
   <Project Path="VenueFlow.Data/VenueFlow.Data.csproj" />
+  <Project Path="VenueFlow.Tests/VenueFlow.Tests.csproj" Id="067eaee4-8b0f-4c1e-aed1-8d27a0563a2b" />
   <Project Path="VenueFlow/VenueFlow.csproj" />
 </Solution>
