@@ -41,7 +41,7 @@ namespace VenueFlow.Data
                 {
                     Name = weddingName,
                     Date = DateOnly.FromDateTime(DateTime.Now.AddMonths(1)), 
-                    RoomCapacity = rows.Count + 10    
+                    RoomCapacity = rows.Count 
                 };
                 context.Weddings.Add(newWedding);
                 context.SaveChanges();
