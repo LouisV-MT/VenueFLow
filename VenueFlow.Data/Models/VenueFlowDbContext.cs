@@ -24,20 +24,20 @@ public partial class VenueFlowDbContext : DbContext
     public virtual DbSet<Table> Tables { get; set; }
 
     public virtual DbSet<Wedding> Weddings { get; set; }
-   
+
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
         if (!optionsBuilder.IsConfigured)
         {
-            
+
             string dbUser = Environment.GetEnvironmentVariable("VENUEFLOW_USER") ?? "venueadmin";
             string dbPass = Environment.GetEnvironmentVariable("VENUEFLOW_PASS") ?? "";
 
-            
+
             string connectionString = $"Server=tcp:venueflow-server.database.windows.net,1433;Initial Catalog=VenueFlowDB;Persist Security Info=False;User ID={dbUser};Password={dbPass};MultipleActiveResultSets=False;Encrypt=True;TrustServerCertificate=False;Connection Timeout=30;";
 
-            
+
             optionsBuilder.UseSqlServer(connectionString);
         }
     }
