@@ -1,4 +1,4 @@
-﻿using Microsoft.EntityFrameworkCore;
+﻿uusing Microsoft.EntityFrameworkCore;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -7,7 +7,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Input;
 using System.Windows.Media;
-using System.Windows.Media.Imaging;
 using System.Windows.Shapes;
 using VenueFlow.Data;
 using VenueFlow.Data.Models;
@@ -58,20 +57,36 @@ namespace VenueFlow
 
         private async void SeatingPlanWindow_Loaded(object sender, RoutedEventArgs e)
         {
-            await EnsureTablesExistAsync();
-            // Note: Algorithm is NOT run here to prevent overwriting manual changes on reload.
+            // Ensure tables exist and detect whether we created/changed tables
+            bool tablesChanged = await EnsureTablesExistAsync();
+
+            // If this wedding currently has no seated guests (first open) OR we created/changed tables,
+            // run the seating algorithm so imported guests get auto-seated.
+            bool anySeated = await AnyGuestAssignedAsync();
+            if (!anySeated || tablesChanged)
+            {
+                // Run the algorithm. Await to ensure DB state is consistent before redraw.
+                await _seatingService.AutoSeatGuests(_weddingId);
+            }
+
+            // Draw and populate UI
             await DrawRoomLayoutIsolated();
             await PopulateUnassignedGuestsIsolated();
         }
 
         // --- DATA LOGIC ---
 
-        private async Task EnsureTablesExistAsync()
+        /// <summary>
+        /// Ensures sensible tables exist for this wedding.
+        /// Returns true if any changes were made (tables added/removed).
+        /// </summary>
+        private async Task<bool> EnsureTablesExistAsync()
         {
+            bool changesMade = false;
             using (var isolatedContext = new VenueFlowDbContext())
             {
                 var wedding = await isolatedContext.Weddings.FindAsync(_weddingId);
-                if (wedding == null) return;
+                if (wedding == null) return false;
 
                 // 1. Determine Target Table Count
                 int targetGuestTables;
@@ -86,8 +101,6 @@ namespace VenueFlow
                     .ToListAsync();
 
                 bool sweetheartExists = await isolatedContext.Tables.AnyAsync(t => t.WeddingId == _weddingId && t.TableNumber == 0);
-
-                bool changesMade = false;
 
                 // 3. Add Sweetheart if missing
                 if (!sweetheartExists)
@@ -125,6 +138,17 @@ namespace VenueFlow
 
                 if (changesMade) await isolatedContext.SaveChangesAsync();
             }
+
+            return changesMade;
+        }
+
+        /// <summary>
+        /// Returns true if any guest is already assigned a table for this wedding.
+        /// </summary>
+        private async Task<bool> AnyGuestAssignedAsync()
+        {
+            using var ctx = new VenueFlowDbContext();
+            return await ctx.Guests.AnyAsync(g => g.WeddingId == _weddingId && g.TableId != null);
         }
 
         private async Task DrawRoomLayoutIsolated()
@@ -133,8 +157,6 @@ namespace VenueFlow
             {
                 var tables = await isolatedContext.Tables
                     .Include(t => t.Guests.Where(g => g.WeddingId == _weddingId))
-                    .ThenInclude(g => g.MenuOption)
-
                     .Where(t => t.WeddingId == _weddingId)
                     .OrderBy(t => t.TableNumber)
                     .ToListAsync();
@@ -663,11 +685,9 @@ namespace VenueFlow
 
                         // Text (Name + Optional Diet)
                         string dietText = (string.IsNullOrEmpty(guest.DietaryRestrictions) || guest.DietaryRestrictions == "None") ? "" : $"\n({guest.DietaryRestrictions})";
-                        string mealName = guest.MenuOption != null ? guest.MenuOption.OptionName : "-";
-                        if (mealName.Length > 9) mealName = mealName.Substring(0, 7) + "..";
                         TextBlock nameText = new TextBlock
                         {
-                            Text = $"{guest.GuestName.Split(' ')[0]}{dietText}\n{mealName}",
+                            Text = $"{guest.GuestName.Split(' ')[0]}{dietText}",
                             FontSize = 9,
                             Foreground = Brushes.Black,
                             HorizontalAlignment = HorizontalAlignment.Center,
@@ -711,39 +731,6 @@ namespace VenueFlow
             Canvas.SetLeft(emptyPlacemat, seatPoint.X - 30);
             Canvas.SetTop(emptyPlacemat, seatPoint.Y - 15);
             SeatingCanvas.Children.Add(emptyPlacemat);
-        }
-        public RenderTargetBitmap CaptureCurrentScreen()
-        {
-            SeatingCanvas.UpdateLayout();
-
-            Rect bounds = VisualTreeHelper.GetDescendantBounds(SeatingCanvas);
-
-            
-            if (bounds.Width == 0 || bounds.Height == 0) bounds = new Rect(0, 0, 800, 600);
-
-            
-            RenderTargetBitmap rtb = new RenderTargetBitmap((int)bounds.Width, (int)bounds.Height, 96, 96, PixelFormats.Pbgra32);
-
-            DrawingVisual dv = new DrawingVisual();
-            using (DrawingContext ctx = dv.RenderOpen())
-            {
-                ctx.DrawRectangle(Brushes.White, null, new Rect(new Point(), bounds.Size));
-
-                VisualBrush vb = new VisualBrush(SeatingCanvas);
-                ctx.DrawRectangle(vb, null, new Rect(new Point(), bounds.Size));
-            }
-
-            rtb.Render(dv);
-            return rtb;
-        }
-        private void BtnExport_Click(object sender, RoutedEventArgs e)
-        {
-            
-            RenderTargetBitmap image = CaptureCurrentScreen();
-
-            var preview = new PrintPreviewWindow(image);
-            preview.Owner = this;
-            preview.ShowDialog();
         }
     }
 }
