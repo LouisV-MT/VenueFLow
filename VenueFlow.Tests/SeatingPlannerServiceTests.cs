@@ -57,5 +57,82 @@ namespace VenueFlow.Tests.Services
             Assert.AreEqual(1, result.Count);
             Assert.AreEqual(1, result[0].GuestId);
         }
+
+        [TestMethod]
+        public void GetExtendedGroup_HandlesCircularReferences_WithoutCrashing()
+        {
+            var g1 = new Guest { GuestId = 1 };
+            var g2 = new Guest { GuestId = 2 };
+            var allGuests = new List<Guest> { g1, g2 };
+
+            var prefs = new List<SeatingPreference>
+            {
+                new SeatingPreference { GuestIdSource = 1, GuestIdTarget = 2, IsMustSitWith = true },
+                new SeatingPreference { GuestIdSource = 2, GuestIdTarget = 1, IsMustSitWith = true }
+            };
+
+            var initialGroup = new List<Guest> { g1 };
+
+            var result = SeatingPlannerService.GetExtendedGroup(initialGroup, allGuests, prefs);
+
+            Assert.AreEqual(2, result.Count, "Should handle circular links and return both guests.");
+        }
+
+        [TestMethod]
+        public void CheckConflict_ReturnsTrue_WhenOnlyPositivePreferencesExist()
+        {
+            var service = new SeatingPlannerService(null);
+            var g1 = new Guest { GuestId = 1, TableId = 5 };
+            var g2 = new Guest { GuestId = 2 };
+            var allGuests = new List<Guest> { g1, g2 };
+
+            var prefs = new List<SeatingPreference>
+            {
+                new SeatingPreference { GuestIdSource = 1, GuestIdTarget = 2, IsMustSitWith = true }
+            };
+
+            var group = new List<Guest> { g2 };
+
+            
+            bool isSafe = service.CheckMustNotSitWithConflict(group, 5, prefs, allGuests);
+
+            Assert.IsTrue(isSafe, "Positive preferences should not trigger a conflict warning.");
+        }
+
+        // Test 5: Conflict Logic - Empty Table (Boundary Test)
+        [TestMethod]
+        public void CheckConflict_ReturnsTrue_WhenTableIsEmpty()
+        {
+            var service = new SeatingPlannerService(null);
+            var newGuest = new Guest { GuestId = 1 };
+            var allGuests = new List<Guest> { newGuest };
+            var prefs = new List<SeatingPreference>();
+            var group = new List<Guest> { newGuest };
+
+            bool isSafe = service.CheckMustNotSitWithConflict(group, 99, prefs, allGuests);
+
+            Assert.IsTrue(isSafe, "Empty table should never have a conflict.");
+        }
+
+        // Test 6: Math Logic - Table Coordinates
+        [TestMethod]
+        public void TableCoordinates_Radius_CalculatesHalfWidth()
+        {
+            double width = 200;
+            double height = 200;
+
+            var table = new TableCoordinates(1, 1, 100, 100, width, height, 10);
+
+            Assert.AreEqual(100, table.Radius, "Radius should be exactly half of width.");
+        }
+
+        // Test 7: Data Logic - Guest Defaults
+        [TestMethod]
+        public void Guest_IsUnseated_ByDefault()
+        {
+            var guest = new Guest();
+
+            Assert.IsNull(guest.TableId, "New guest should not be assigned a table automatically.");
+        }
     }
 }
