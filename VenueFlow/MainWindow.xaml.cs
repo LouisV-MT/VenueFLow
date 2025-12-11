@@ -1,10 +1,11 @@
-﻿using System.Collections.Generic;
+﻿using Microsoft.Win32;
+using System.Collections.Generic;
 using System.Linq;
 using System.Windows;
 using System.Windows.Input; 
-using Microsoft.Win32;
 using VenueFlow.Data;
 using VenueFlow.Data.Models;
+using VenueFlow.Services;
 
 namespace VenueFlow
 {
@@ -35,7 +36,7 @@ namespace VenueFlow
             }
         }
 
-        private void BtnImport_Click(object sender, RoutedEventArgs e)
+        private async void BtnImport_Click(object sender, RoutedEventArgs e)
         {
             OpenFileDialog openFileDialog = new OpenFileDialog
             {
@@ -57,9 +58,19 @@ namespace VenueFlow
 
                     
                     var service = new ImportService();
-                    service.ImportWedding(openFileDialog.FileName);
+                    int newWeddingId = service.ImportWedding(openFileDialog.FileName);
+                    if (newWeddingId > 0)
+                    {
+                        using (var context = new VenueFlowDbContext())
+                        {
+                            var seatingService = new SeatingPlannerService(context);
+                            await seatingService.AutoSeatGuests(newWeddingId);
+                        }
+                    }
 
-                    
+
+
+
                     LoadWeddings();
                     MessageBox.Show("Wedding created successfully!", "Success", MessageBoxButton.OK, MessageBoxImage.Information);
                 }
