@@ -58,15 +58,8 @@ namespace VenueFlow
 
                     
                     var service = new ImportService();
-                    int newWeddingId = service.ImportWedding(openFileDialog.FileName);
-                    if (newWeddingId > 0)
-                    {
-                        using (var context = new VenueFlowDbContext())
-                        {
-                            var seatingService = new SeatingPlannerService(context);
-                            await seatingService.AutoSeatGuests(newWeddingId);
-                        }
-                    }
+                    service.ImportWedding(openFileDialog.FileName);
+                    
 
 
 

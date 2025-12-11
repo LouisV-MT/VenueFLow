@@ -17,13 +17,13 @@ namespace VenueFlow.Data
             public int Proximity { get; set; } 
         }
 
-        public int ImportWedding(string filePath)
+        public void ImportWedding(string filePath)
         {
             using (var context = new VenueFlowDbContext())
             {
                
                 var rows = MiniExcel.Query<ExcelRow>(filePath).ToList();
-                if (!rows.Any()) return 0;
+                if (!rows.Any()) return ;
 
                 var couple = rows
                     .Where(r => r.Proximity == 0 && !string.IsNullOrEmpty(r.FullName))
@@ -85,7 +85,6 @@ namespace VenueFlow.Data
 
                 context.SaveChanges();
 
-                return newWedding.WeddingId;
             }
         }
     }

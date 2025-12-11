@@ -119,22 +119,46 @@ namespace VenueFlow
             }
         }
 
-        private void BtnSeatingPlan_Click(object sender, RoutedEventArgs e)
+        private async void BtnSeatingPlan_Click(object sender, RoutedEventArgs e)
         {
-            // Create a DbContext and SeatingPlannerService and pass them to the window
-            var context = new VenueFlowDbContext();
-            var seatingService = new SeatingPlannerService(context);
+            
+            using (var checkContext = new VenueFlowDbContext())
+            {
+                // Check if ANY guest for this wedding is already seated
+                bool isWorkInProgress = await checkContext.Guests
+                    .AnyAsync(g => g.WeddingId == _weddingId && g.TableId != null);
 
-            var seatingWindow = new SeatingPlanWindow(context, seatingService, _weddingId)
+                if (!isWorkInProgress)
+                {
+                   
+                    var wedding = await checkContext.Weddings.FindAsync(_weddingId);
+                    if (wedding != null)
+                    {
+                        if (RoomSmall.IsChecked == true) wedding.RoomCapacity = 22;
+                        else if (RoomMedium.IsChecked == true) wedding.RoomCapacity = 42;
+                        else if (RoomLarge.IsChecked == true) wedding.RoomCapacity = 62;
+                        await checkContext.SaveChangesAsync();
+                    }
+
+                 
+                    var seatingService = new SeatingPlannerService(checkContext);
+                    await seatingService.AutoSeatGuests(_weddingId);
+                }
+            }
+
+            
+            var context = new VenueFlowDbContext();
+            var serviceForWindow = new SeatingPlannerService(context);
+
+            var seatingWindow = new SeatingPlanWindow(context, serviceForWindow, _weddingId)
             {
                 Owner = this,
                 WindowStartupLocation = WindowStartupLocation.CenterOwner
             };
 
-            // Open as a modal so the details window stays underneath and reappears when closed
             seatingWindow.ShowDialog();
 
-            // Do not call this.Close(); leaving the details window open underneath
+            LoadData();
         }
     }
 }

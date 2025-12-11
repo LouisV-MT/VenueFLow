@@ -48,7 +48,7 @@ namespace VenueFlow.Tests.Services
             var guest1 = new Guest { GuestId = 1, GuestName = "A" };
             var guest2 = new Guest { GuestId = 2, GuestName = "B" };
             var allGuests = new List<Guest> { guest1, guest2 };
-            var preferences = new List<SeatingPreference>(); // Empty list
+            var preferences = new List<SeatingPreference>();
 
             var initialGroup = new List<Guest> { guest1 };
 
